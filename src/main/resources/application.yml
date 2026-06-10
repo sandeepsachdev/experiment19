@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: freetotv-recommender
+  thymeleaf:
+    cache: false
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+tv:
+  defaults:
+    # ISO 3166-1 country code used when the request does not specify one.
+    country: GB
+    # Number of days, starting today, to include.
+    days: 3
+    # Maximum recommendations returned.
+    limit: 25
+    # Minimum composite score (0-10) required to be recommended.
+    min-rating: 0.0
+  tvmaze:
+    base-url: https://api.tvmaze.com
+  omdb:
+    # Enrichment with IMDb / Rotten Tomatoes / Metacritic ratings is off until a key is provided.
+    enabled: ${OMDB_ENABLED:false}
+    base-url: https://www.omdbapi.com
+    api-key: ${OMDB_API_KEY:}
+    # Only the top N candidates per request are enriched to respect free-tier limits.
+    max-lookups: 40
+  scoring:
+    # Relative weights, re-normalised across whichever sources are present for a title.
+    imdb: 0.40
+    rotten-tomatoes: 0.25
+    metacritic: 0.20
+    tvmaze: 0.15
+
+logging:
+  level:
+    com.example.freetotv: INFO

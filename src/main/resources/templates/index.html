@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>What's good on free-to-air TV</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}"/>
+</head>
+<body>
+<header class="hero">
+    <h1>📺 What's good on free-to-air TV</h1>
+    <p class="tagline">The best things to watch today and over the next few days, ranked by
+        real-time crowd ratings and review sources.</p>
+</header>
+
+<main>
+    <form class="controls" method="get" th:action="@{/}">
+        <label>
+            Country
+            <input type="text" name="country" maxlength="2" th:value="${country}"
+                   placeholder="GB" title="ISO country code, e.g. GB, US, AU"/>
+        </label>
+        <label>
+            Days ahead
+            <select name="days">
+                <option th:each="d : ${#numbers.sequence(1, 7)}"
+                        th:value="${d}" th:text="${d}" th:selected="${d == days}"></option>
+            </select>
+        </label>
+        <label>
+            Genre
+            <input type="text" name="genre" th:value="${genre}" placeholder="any"/>
+        </label>
+        <label>
+            Min rating
+            <input type="number" name="minRating" min="0" max="10" step="0.5" th:value="${minRating}"/>
+        </label>
+        <button type="submit">Find something to watch</button>
+    </form>
+
+    <p class="empty" th:if="${recommendations.isEmpty()}">
+        No recommendations found for <span th:text="${country}">GB</span>. Try a different country
+        code, widen the day range, or lower the minimum rating.
+    </p>
+
+    <section class="grid">
+        <article class="card" th:each="rec : ${recommendations}">
+            <div class="poster" th:if="${rec.imageUrl != null}">
+                <img th:src="${rec.imageUrl}" th:alt="${rec.title}"/>
+            </div>
+            <div class="body">
+                <div class="card-head">
+                    <h2 th:text="${rec.title}">Show title</h2>
+                    <span class="score" th:if="${rec.compositeScore > 0}"
+                          th:text="${#numbers.formatDecimal(rec.compositeScore, 1, 1)}">8.4</span>
+                </div>
+
+                <p class="meta">
+                    <span th:if="${rec.type != null}" th:text="${rec.type}">Scripted</span>
+                    <span th:if="${!rec.genres.isEmpty()}" th:text="'· ' + ${#strings.listJoin(rec.genres, ', ')}">Drama</span>
+                </p>
+
+                <p class="why" th:text="${rec.why}">Why we recommend this.</p>
+
+                <ul class="sources" th:if="${!rec.ratingSources.isEmpty()}">
+                    <li th:each="src : ${rec.ratingSources}">
+                        <span class="src-name" th:text="${src.name}">IMDb</span>
+                        <span class="src-val" th:text="${src.display}">8.4/10</span>
+                    </li>
+                </ul>
+
+                <details class="airings" th:if="${!rec.airings.isEmpty()}">
+                    <summary th:text="${rec.airings.size()} + ' airing(s)'">2 airings</summary>
+                    <ul>
+                        <li th:each="air : ${rec.airings}">
+                            <span class="when" th:if="${air.start != null}"
+                                  th:text="${#temporals.format(air.start, 'EEE d MMM, HH:mm')}">Tue 10 Jun, 21:00</span>
+                            <span class="when" th:if="${air.start == null}">Time TBC</span>
+                            <span class="channel" th:if="${air.channel != null}" th:text="${air.channel}">BBC One</span>
+                            <span class="episode" th:if="${air.episodeName != null}" th:text="${air.episodeName}"></span>
+                        </li>
+                    </ul>
+                </details>
+
+                <p class="summary" th:if="${rec.summary != null}" th:text="${rec.summary}">Summary.</p>
+
+                <a class="official" th:if="${rec.officialSite != null}" th:href="${rec.officialSite}"
+                   target="_blank" rel="noopener">Official site ↗</a>
+            </div>
+        </article>
+    </section>
+</main>
+
+<footer>
+    <p>Schedule data from <a href="https://www.tvmaze.com" target="_blank" rel="noopener">TVmaze</a>;
+        ratings from <a href="https://www.omdbapi.com" target="_blank" rel="noopener">OMDb</a>
+        (IMDb / Rotten Tomatoes / Metacritic) when enabled.</p>
+</footer>
+</body>
+</html>
