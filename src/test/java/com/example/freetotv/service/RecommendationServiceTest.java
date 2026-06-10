@@ -1,6 +1,9 @@
 package com.example.freetotv.service;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
@@ -22,6 +25,9 @@ import static org.mockito.Mockito.when;
 
 class RecommendationServiceTest {
 
+    // "Now" fixed at 08:00 UTC on 2026-06-10 so airings later that day are upcoming.
+    private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-06-10T08:00:00Z"), ZoneOffset.UTC);
+
     private TvMazeClient tvMazeClient;
     private OmdbClient omdbClient;
     private RecommendationService service;
@@ -32,7 +38,7 @@ class RecommendationServiceTest {
         omdbClient = mock(OmdbClient.class);
         AppProperties properties = new AppProperties(null, null, null, null);
         service = new RecommendationService(tvMazeClient, omdbClient,
-                new ScoringService(properties), properties);
+                new ScoringService(properties), properties, CLOCK);
         when(omdbClient.isEnabled()).thenReturn(false);
     }
 
@@ -48,25 +54,61 @@ class RecommendationServiceTest {
                 airstamp, 60, show);
     }
 
+    private List<Recommendation> recommend(double minRating, Optional<String> genre) {
+        return service.recommend(new RecommendationRequest("GB", 1, 25, minRating, genre));
+    }
+
     @Test
-    void dedupesShowsAndAggregatesAirings() {
+    void dedupesShowsAndAggregatesUpcomingAirings() {
         when(tvMazeClient.getSchedule(eq("GB"), any(LocalDate.class))).thenReturn(List.of(
                 entry(42, "Brilliant Drama", 8.6, List.of("Drama"), "BBC One", "2026-06-10T20:00:00+01:00"),
                 entry(42, "Brilliant Drama", 8.6, List.of("Drama"), "BBC Two", "2026-06-10T22:00:00+01:00"),
                 entry(7, "Okay Comedy", 7.0, List.of("Comedy"), "ITV", "2026-06-10T21:00:00+01:00")));
 
-        List<Recommendation> recs = service.recommend(
-                new RecommendationRequest("GB", 1, 25, 0.0, Optional.empty()));
+        List<Recommendation> recs = recommend(0.0, Optional.empty());
 
         assertThat(recs).hasSize(2);
-        Recommendation top = recs.get(0);
-        assertThat(top.title()).isEqualTo("Brilliant Drama");
-        assertThat(top.airings()).hasSize(2);
-        // Aggregated airings are sorted soonest-first.
-        assertThat(top.airings().get(0).channel()).isEqualTo("BBC One");
-        assertThat(top.summary()).isEqualTo("Summary & more.");
-        // Ranked by composite score: the higher-rated drama comes first.
-        assertThat(recs.get(0).compositeScore()).isGreaterThan(recs.get(1).compositeScore());
+        Recommendation drama = recs.get(0);
+        assertThat(drama.title()).isEqualTo("Brilliant Drama");
+        assertThat(drama.airings()).hasSize(2);
+        // Airings are sorted soonest-first and formatted for scanning.
+        assertThat(drama.airings().get(0).channel()).isEqualTo("BBC One");
+        assertThat(drama.airings().get(0).dayLabel()).isEqualTo("Today");
+        assertThat(drama.airings().get(0).time()).isEqualTo("20:00");
+        assertThat(drama.summary()).isEqualTo("Summary & more.");
+    }
+
+    @Test
+    void ordersBySoonestUpcomingAiringNotByScore() {
+        // The lower-rated show airs first and should therefore come first.
+        when(tvMazeClient.getSchedule(eq("GB"), any(LocalDate.class))).thenReturn(List.of(
+                entry(42, "Top Rated, Later", 9.5, List.of("Drama"), "BBC One", "2026-06-10T22:00:00+01:00"),
+                entry(7, "Lower Rated, Sooner", 6.0, List.of("Comedy"), "ITV", "2026-06-10T19:00:00+01:00")));
+
+        List<Recommendation> recs = recommend(0.0, Optional.empty());
+
+        assertThat(recs).extracting(Recommendation::title)
+                .containsExactly("Lower Rated, Sooner", "Top Rated, Later");
+    }
+
+    @Test
+    void hidesAiringsAlreadyInThePast() {
+        when(tvMazeClient.getSchedule(eq("GB"), any(LocalDate.class))).thenReturn(List.of(
+                // 06:00Z is before the fixed "now" of 08:00Z -> excluded entirely.
+                entry(42, "Already Finished", 9.0, List.of("Drama"), "BBC One", "2026-06-10T06:00:00+00:00"),
+                entry(7, "Coming Up", 7.0, List.of("Comedy"), "ITV", "2026-06-10T20:00:00+00:00")));
+
+        List<Recommendation> recs = recommend(0.0, Optional.empty());
+
+        assertThat(recs).extracting(Recommendation::title).containsExactly("Coming Up");
+    }
+
+    @Test
+    void dropsShowWhenAllAiringsArePast() {
+        when(tvMazeClient.getSchedule(eq("GB"), any(LocalDate.class))).thenReturn(List.of(
+                entry(42, "Only Aired Earlier", 9.0, List.of("Drama"), "BBC One", "2026-06-10T07:30:00+00:00")));
+
+        assertThat(recommend(0.0, Optional.empty())).isEmpty();
     }
 
     @Test
@@ -75,8 +117,7 @@ class RecommendationServiceTest {
                 entry(42, "Brilliant Drama", 8.6, List.of("Drama"), "BBC One", "2026-06-10T20:00:00+01:00"),
                 entry(7, "Okay Comedy", 7.0, List.of("Comedy"), "ITV", "2026-06-10T21:00:00+01:00")));
 
-        List<Recommendation> recs = service.recommend(
-                new RecommendationRequest("GB", 1, 25, 0.0, Optional.of("drama")));
+        List<Recommendation> recs = recommend(0.0, Optional.of("drama"));
 
         assertThat(recs).extracting(Recommendation::title).containsExactly("Brilliant Drama");
     }
@@ -87,8 +128,7 @@ class RecommendationServiceTest {
                 entry(42, "Brilliant Drama", 8.6, List.of("Drama"), "BBC One", "2026-06-10T20:00:00+01:00"),
                 entry(7, "Okay Comedy", 7.0, List.of("Comedy"), "ITV", "2026-06-10T21:00:00+01:00")));
 
-        List<Recommendation> recs = service.recommend(
-                new RecommendationRequest("GB", 1, 25, 8.0, Optional.empty()));
+        List<Recommendation> recs = recommend(8.0, Optional.empty());
 
         assertThat(recs).extracting(Recommendation::title).containsExactly("Brilliant Drama");
     }
@@ -102,8 +142,7 @@ class RecommendationServiceTest {
         when(tvMazeClient.getSchedule(eq("GB"), any(LocalDate.class))).thenReturn(List.of(
                 entry(42, "Brilliant Drama", 8.6, List.of("Drama"), "BBC One", "2026-06-10T20:00:00+01:00")));
 
-        List<Recommendation> recs = service.recommend(
-                new RecommendationRequest("GB", 1, 25, 0.0, Optional.empty()));
+        List<Recommendation> recs = recommend(0.0, Optional.empty());
 
         assertThat(recs).hasSize(1);
         assertThat(recs.get(0).ratingSources()).extracting("name")

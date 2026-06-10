@@ -15,8 +15,8 @@ management:
 
 tv:
   defaults:
-    # ISO 3166-1 country code used when the request does not specify one.
-    country: GB
+    # Country (name or ISO code) used when the request does not specify one.
+    country: Australia
     # Number of days, starting today, to include.
     days: 3
     # Maximum recommendations returned.

@@ -16,19 +16,22 @@ public class RequestMapper {
 
     static final int MAX_DAYS = 7;
     static final int MAX_LIMIT = 100;
+    static final String FALLBACK_COUNTRY = "AU";
 
     private final AppProperties properties;
+    private final Countries countries;
 
-    public RequestMapper(AppProperties properties) {
+    public RequestMapper(AppProperties properties, Countries countries) {
         this.properties = properties;
+        this.countries = countries;
     }
 
     public RecommendationRequest toRequest(String country, Integer days, Integer limit,
                                            Double minRating, String genre) {
         AppProperties.Defaults defaults = properties.defaults();
-        String resolvedCountry = StringUtils.hasText(country)
-                ? country.trim().toUpperCase(java.util.Locale.ROOT)
-                : defaults.country();
+        String defaultCode = countries.resolveCode(defaults.country(), FALLBACK_COUNTRY);
+        // Accept either a country name (e.g. "Australia") or an ISO code (e.g. "AU").
+        String resolvedCountry = countries.resolveCode(country, defaultCode);
         int resolvedDays = clamp(days != null ? days : defaults.days(), 1, MAX_DAYS);
         int resolvedLimit = clamp(limit != null ? limit : defaults.limit(), 1, MAX_LIMIT);
         double resolvedMin = clampDouble(minRating != null ? minRating : defaults.minRating(), 0.0, 10.0);

@@ -16,12 +16,21 @@ import org.springframework.web.bind.annotation.RequestParam;
 @Controller
 public class HomeController {
 
+    /** Common TVmaze genres offered in the genre dropdown. */
+    static final List<String> GENRES = List.of(
+            "Action", "Adventure", "Anime", "Children", "Comedy", "Crime", "Documentary", "Drama",
+            "Family", "Fantasy", "Food", "History", "Horror", "Music", "Mystery", "Nature",
+            "Romance", "Science-Fiction", "Sports", "Thriller", "Travel", "War", "Western");
+
     private final RecommendationService recommendationService;
     private final RequestMapper requestMapper;
+    private final Countries countries;
 
-    public HomeController(RecommendationService recommendationService, RequestMapper requestMapper) {
+    public HomeController(RecommendationService recommendationService, RequestMapper requestMapper,
+                          Countries countries) {
         this.recommendationService = recommendationService;
         this.requestMapper = requestMapper;
+        this.countries = countries;
     }
 
     @GetMapping("/")
@@ -35,7 +44,10 @@ public class HomeController {
         List<Recommendation> recommendations = recommendationService.recommend(request);
 
         model.addAttribute("recommendations", recommendations);
+        model.addAttribute("countries", countries.all());
+        model.addAttribute("genres", GENRES);
         model.addAttribute("country", request.country());
+        model.addAttribute("countryName", countries.nameFor(request.country()));
         model.addAttribute("days", request.days());
         model.addAttribute("genre", request.genre().orElse(""));
         model.addAttribute("minRating", request.minRating());

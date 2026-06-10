@@ -1,8 +1,6 @@
 package com.example.freetotv.service;
 
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
@@ -87,17 +85,16 @@ class ScoringServiceTest {
 
     @Test
     void buildWhyIncludesRatingsAndAiringTime() {
-        ZoneId zone = ZoneOffset.UTC;
-        OffsetDateTime now = OffsetDateTime.now(zone);
-        Airing airing = new Airing("BBC One", now.plusHours(2), "Episode 1", 1, 1, 60);
+        Airing airing = new Airing("ABC", OffsetDateTime.parse("2026-06-10T21:00:00+10:00"),
+                "Today", "21:00", "Episode 1", 1, 1, 60);
 
         String why = scoring.buildWhy("Great Show", List.of("Drama"),
                 List.of(new RatingSource(ScoringService.IMDB, 8.4, "8.4/10")),
-                Optional.of(airing), zone);
+                Optional.of(airing));
 
         assertThat(why).contains("drama");
         assertThat(why).contains("IMDb 8.4/10");
-        assertThat(why).contains("airing");
-        assertThat(why).contains("BBC One");
+        assertThat(why).contains("airing today at 21:00");
+        assertThat(why).contains("ABC");
     }
 }

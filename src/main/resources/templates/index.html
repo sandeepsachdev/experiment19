@@ -9,16 +9,18 @@
 <body>
 <header class="hero">
     <h1>📺 What's good on free-to-air TV</h1>
-    <p class="tagline">The best things to watch today and over the next few days, ranked by
-        real-time crowd ratings and review sources.</p>
+    <p class="tagline">The best things coming up on broadcast TV, ordered by what's on soonest and
+        ranked by real-time crowd ratings and review sources.</p>
 </header>
 
 <main>
     <form class="controls" method="get" th:action="@{/}">
         <label>
             Country
-            <input type="text" name="country" maxlength="2" th:value="${country}"
-                   placeholder="GB" title="ISO country code, e.g. GB, US, AU"/>
+            <select name="country">
+                <option th:each="c : ${countries}" th:value="${c.code}" th:text="${c.name}"
+                        th:selected="${c.code == country}"></option>
+            </select>
         </label>
         <label>
             Days ahead
@@ -29,7 +31,11 @@
         </label>
         <label>
             Genre
-            <input type="text" name="genre" th:value="${genre}" placeholder="any"/>
+            <select name="genre">
+                <option value="" th:selected="${genre == ''}">Any genre</option>
+                <option th:each="g : ${genres}" th:value="${g}" th:text="${g}"
+                        th:selected="${g == genre}"></option>
+            </select>
         </label>
         <label>
             Min rating
@@ -39,8 +45,8 @@
     </form>
 
     <p class="empty" th:if="${recommendations.isEmpty()}">
-        No recommendations found for <span th:text="${country}">GB</span>. Try a different country
-        code, widen the day range, or lower the minimum rating.
+        Nothing upcoming found for <span th:text="${countryName}">Australia</span>. Try a different
+        country, widen the day range, or lower the minimum rating.
     </p>
 
     <section class="grid">
@@ -60,6 +66,13 @@
                     <span th:if="${!rec.genres.isEmpty()}" th:text="'· ' + ${#strings.listJoin(rec.genres, ', ')}">Drama</span>
                 </p>
 
+                <!-- Next upcoming airing, formatted for quick scanning -->
+                <div class="next-up" th:with="next=${rec.airings[0]}">
+                    <span class="when-day" th:text="${next.dayLabel} ?: 'Soon'">Today</span>
+                    <span class="when-time" th:if="${next.time != null}" th:text="${next.time}">21:00</span>
+                    <span class="on-channel" th:if="${next.channel != null}" th:text="${next.channel}">ABC</span>
+                </div>
+
                 <p class="why" th:text="${rec.why}">Why we recommend this.</p>
 
                 <ul class="sources" th:if="${!rec.ratingSources.isEmpty()}">
@@ -69,14 +82,13 @@
                     </li>
                 </ul>
 
-                <details class="airings" th:if="${!rec.airings.isEmpty()}">
-                    <summary th:text="${rec.airings.size()} + ' airing(s)'">2 airings</summary>
+                <details class="airings" th:if="${rec.airings.size() > 1}">
+                    <summary th:text="'All ' + ${rec.airings.size()} + ' upcoming airings'">All airings</summary>
                     <ul>
                         <li th:each="air : ${rec.airings}">
-                            <span class="when" th:if="${air.start != null}"
-                                  th:text="${#temporals.format(air.start, 'EEE d MMM, HH:mm')}">Tue 10 Jun, 21:00</span>
-                            <span class="when" th:if="${air.start == null}">Time TBC</span>
-                            <span class="channel" th:if="${air.channel != null}" th:text="${air.channel}">BBC One</span>
+                            <span class="when" th:text="${air.dayLabel} ?: 'Time TBC'">Today</span>
+                            <span class="time" th:if="${air.time != null}" th:text="${air.time}">21:00</span>
+                            <span class="channel" th:if="${air.channel != null}" th:text="${air.channel}">ABC</span>
                             <span class="episode" th:if="${air.episodeName != null}" th:text="${air.episodeName}"></span>
                         </li>
                     </ul>

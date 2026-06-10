@@ -102,6 +102,21 @@ main { max-width: 70rem; margin: 0 auto; padding: 1.5rem; }
 }
 
 .meta { margin: 0; color: var(--muted); font-size: .82rem; }
+
+.next-up {
+    display: flex;
+    align-items: baseline;
+    gap: .5rem;
+    background: #11142a;
+    border: 1px solid #2c3252;
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: .45rem .65rem;
+}
+.next-up .when-day { font-weight: 700; color: var(--accent); }
+.next-up .when-time { font-weight: 700; font-size: 1.05rem; }
+.next-up .on-channel { color: var(--muted); margin-left: auto; font-size: .85rem; }
+
 .why { margin: 0; font-size: .92rem; }
 
 .sources {
@@ -125,8 +140,10 @@ main { max-width: 70rem; margin: 0 auto; padding: 1.5rem; }
 
 .airings summary { cursor: pointer; color: var(--accent); font-size: .85rem; }
 .airings ul { margin: .5rem 0 0; padding-left: 1rem; font-size: .82rem; color: var(--muted); }
-.airings .channel { color: var(--text); font-weight: 600; }
-.airings .when { margin-right: .4rem; }
+.airings li { margin-bottom: .2rem; }
+.airings .when { font-weight: 600; color: var(--text); }
+.airings .time { margin-left: .35rem; }
+.airings .channel { margin-left: .45rem; color: var(--accent); }
 .airings .episode { display: block; font-style: italic; }
 
 .summary { font-size: .85rem; color: var(--muted); margin: 0; }

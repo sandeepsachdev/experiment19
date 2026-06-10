@@ -14,7 +14,7 @@ public record AppProperties(
 
     public AppProperties {
         if (defaults == null) {
-            defaults = new Defaults("GB", 3, 25, 0.0);
+            defaults = new Defaults("Australia", 3, 25, 0.0);
         }
         if (tvmaze == null) {
             tvmaze = new TvMaze("https://api.tvmaze.com");

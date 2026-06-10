@@ -1,8 +1,11 @@
 package com.example.freetotv.service;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -27,43 +30,51 @@ import org.springframework.util.StringUtils;
 
 /**
  * Builds free-to-air TV recommendations by aggregating the broadcast schedule across the
- * requested window, enriching the strongest candidates with review-site ratings, scoring them,
- * and returning the best picks.
+ * requested window, dropping anything already aired, enriching the strongest candidates with
+ * review-site ratings, scoring them, and returning the picks ordered by what is coming up soonest.
  */
 @Service
 public class RecommendationService {
 
     private static final Logger log = LoggerFactory.getLogger(RecommendationService.class);
 
+    private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm", Locale.ENGLISH);
+    private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH);
+
     // Best-effort mapping from country to a display time zone; falls back to UTC.
-    private static final Map<String, ZoneId> COUNTRY_ZONES = Map.of(
-            "GB", ZoneId.of("Europe/London"),
-            "IE", ZoneId.of("Europe/Dublin"),
-            "US", ZoneId.of("America/New_York"),
-            "CA", ZoneId.of("America/Toronto"),
-            "AU", ZoneId.of("Australia/Sydney"),
-            "NZ", ZoneId.of("Pacific/Auckland"),
-            "DE", ZoneId.of("Europe/Berlin"),
-            "FR", ZoneId.of("Europe/Paris"),
-            "ES", ZoneId.of("Europe/Madrid"),
-            "IN", ZoneId.of("Asia/Kolkata"));
+    private static final Map<String, ZoneId> COUNTRY_ZONES = Map.ofEntries(
+            Map.entry("AU", ZoneId.of("Australia/Sydney")),
+            Map.entry("NZ", ZoneId.of("Pacific/Auckland")),
+            Map.entry("GB", ZoneId.of("Europe/London")),
+            Map.entry("IE", ZoneId.of("Europe/Dublin")),
+            Map.entry("US", ZoneId.of("America/New_York")),
+            Map.entry("CA", ZoneId.of("America/Toronto")),
+            Map.entry("DE", ZoneId.of("Europe/Berlin")),
+            Map.entry("FR", ZoneId.of("Europe/Paris")),
+            Map.entry("ES", ZoneId.of("Europe/Madrid")),
+            Map.entry("IT", ZoneId.of("Europe/Rome")),
+            Map.entry("NL", ZoneId.of("Europe/Amsterdam")),
+            Map.entry("IN", ZoneId.of("Asia/Kolkata")));
 
     private final TvMazeClient tvMazeClient;
     private final OmdbClient omdbClient;
     private final ScoringService scoringService;
     private final AppProperties properties;
+    private final Clock clock;
 
     public RecommendationService(TvMazeClient tvMazeClient, OmdbClient omdbClient,
-                                 ScoringService scoringService, AppProperties properties) {
+                                 ScoringService scoringService, AppProperties properties, Clock clock) {
         this.tvMazeClient = tvMazeClient;
         this.omdbClient = omdbClient;
         this.scoringService = scoringService;
         this.properties = properties;
+        this.clock = clock;
     }
 
     public List<Recommendation> recommend(RecommendationRequest request) {
         ZoneId zone = COUNTRY_ZONES.getOrDefault(request.country().toUpperCase(Locale.ROOT), ZoneId.of("UTC"));
-        LocalDate today = LocalDate.now(zone);
+        Instant now = clock.instant();
+        LocalDate today = now.atZone(zone).toLocalDate();
 
         // 1. Aggregate the schedule across the window, grouped by show.
         Map<Long, ShowAggregate> byShow = new LinkedHashMap<>();
@@ -80,26 +91,30 @@ public class RecommendationService {
         List<ShowAggregate> candidates = new ArrayList<>(byShow.values());
         candidates.sort(Comparator.comparingDouble(ShowAggregate::tvmazeScore).reversed());
 
-        // 3. Enrich the top candidates with review-site ratings, then build recommendations.
+        // 3. Build recommendations, dropping anything that has already aired, and enrich the
+        //    top candidates that still have upcoming airings with review-site ratings.
         List<Recommendation> recommendations = new ArrayList<>();
         int enrichBudget = omdbClient.isEnabled() ? properties.omdb().maxLookups() : 0;
         int enriched = 0;
         for (ShowAggregate aggregate : candidates) {
+            List<Airing> upcoming = upcomingAirings(aggregate, zone, today, now);
+            if (upcoming.isEmpty()) {
+                continue;
+            }
             boolean tryEnrich = enriched < enrichBudget && StringUtils.hasText(aggregate.imdbId());
-            Recommendation rec = toRecommendation(aggregate, tryEnrich, zone);
+            recommendations.add(toRecommendation(aggregate, upcoming, tryEnrich));
             if (tryEnrich) {
                 enriched++;
             }
-            recommendations.add(rec);
         }
 
-        // 4. Filter, sort by composite score, and cap to the requested limit.
+        // 4. Filter, order by the soonest upcoming airing, and cap to the requested limit.
         String genreFilter = request.genre().map(g -> g.toLowerCase(Locale.ROOT)).orElse(null);
         return recommendations.stream()
                 .filter(r -> r.compositeScore() >= request.minRating())
                 .filter(r -> matchesGenre(r, genreFilter))
-                .sorted(Comparator.comparingDouble(Recommendation::compositeScore).reversed()
-                        .thenComparing(earliestStart()))
+                .sorted(Comparator.comparing(this::soonestStart)
+                        .thenComparing(Comparator.comparingDouble(Recommendation::compositeScore).reversed()))
                 .limit(request.limit())
                 .toList();
     }
@@ -109,15 +124,41 @@ public class RecommendationService {
         if (show == null || show.id() == null) {
             return;
         }
-        ShowAggregate aggregate = byShow.computeIfAbsent(show.id(), id -> new ShowAggregate(show));
-        aggregate.addAiring(toAiring(entry, show));
+        byShow.computeIfAbsent(show.id(), id -> new ShowAggregate(show)).addEntry(entry);
     }
 
-    private Airing toAiring(ScheduleEntry entry, TvMazeShow show) {
+    /** Builds the still-upcoming airings for a show, formatted for scanning and sorted soonest-first. */
+    private List<Airing> upcomingAirings(ShowAggregate aggregate, ZoneId zone, LocalDate today, Instant now) {
+        TvMazeShow show = aggregate.show();
         String channel = show.network() != null ? show.network().name()
                 : (show.webChannel() != null ? show.webChannel().name() : null);
-        return new Airing(channel, parseStart(entry.airstamp()), entry.name(),
-                entry.season(), entry.number(), entry.runtime());
+
+        List<Airing> airings = new ArrayList<>();
+        for (ScheduleEntry entry : aggregate.entries()) {
+            OffsetDateTime start = parseStart(entry.airstamp());
+            // Drop anything that has already started.
+            if (start != null && !start.toInstant().isAfter(now)) {
+                continue;
+            }
+            OffsetDateTime local = start == null ? null : start.atZoneSameInstant(zone).toOffsetDateTime();
+            airings.add(new Airing(channel, local,
+                    local == null ? null : dayLabel(local.toLocalDate(), today),
+                    local == null ? null : local.format(TIME),
+                    entry.name(), entry.season(), entry.number(), entry.runtime()));
+        }
+        airings.sort(Comparator.comparing(Airing::start, Comparator.nullsLast(Comparator.naturalOrder())));
+        return airings;
+    }
+
+    private String dayLabel(LocalDate date, LocalDate today) {
+        long delta = today.until(date).getDays();
+        if (delta == 0) {
+            return "Today";
+        }
+        if (delta == 1) {
+            return "Tomorrow";
+        }
+        return date.format(DAY);
     }
 
     private OffsetDateTime parseStart(String airstamp) {
@@ -131,7 +172,7 @@ public class RecommendationService {
         }
     }
 
-    private Recommendation toRecommendation(ShowAggregate aggregate, boolean enrich, ZoneId zone) {
+    private Recommendation toRecommendation(ShowAggregate aggregate, List<Airing> airings, boolean enrich) {
         TvMazeShow show = aggregate.show();
 
         List<RatingSource> sources = new ArrayList<>();
@@ -143,9 +184,8 @@ public class RecommendationService {
         }
 
         double composite = scoringService.composite(sources);
-        List<Airing> airings = aggregate.sortedAirings();
         Optional<Airing> next = airings.stream().filter(a -> a.start() != null).findFirst();
-        String why = scoringService.buildWhy(show.name(), show.genres(), sources, next, zone);
+        String why = scoringService.buildWhy(show.name(), show.genres(), sources, next);
 
         return new Recommendation(
                 show.id(),
@@ -168,14 +208,12 @@ public class RecommendationService {
         return rec.genres().stream().anyMatch(g -> g.toLowerCase(Locale.ROOT).contains(genreFilter));
     }
 
-    private Comparator<Recommendation> earliestStart() {
-        return Comparator.comparing(
-                r -> r.airings().stream()
-                        .map(Airing::start)
-                        .filter(s -> s != null)
-                        .min(Comparator.naturalOrder())
-                        .orElse(OffsetDateTime.MAX),
-                Comparator.naturalOrder());
+    private OffsetDateTime soonestStart(Recommendation rec) {
+        return rec.airings().stream()
+                .map(Airing::start)
+                .filter(s -> s != null)
+                .min(Comparator.naturalOrder())
+                .orElse(OffsetDateTime.MAX);
     }
 
     private String imageUrl(TvMazeShow show) {
@@ -196,7 +234,7 @@ public class RecommendationService {
     /** Mutable accumulator used while grouping schedule entries by show. */
     private static final class ShowAggregate {
         private final TvMazeShow show;
-        private final List<Airing> airings = new ArrayList<>();
+        private final List<ScheduleEntry> entries = new ArrayList<>();
 
         ShowAggregate(TvMazeShow show) {
             this.show = show;
@@ -206,15 +244,12 @@ public class RecommendationService {
             return show;
         }
 
-        void addAiring(Airing airing) {
-            airings.add(airing);
+        List<ScheduleEntry> entries() {
+            return entries;
         }
 
-        List<Airing> sortedAirings() {
-            return airings.stream()
-                    .sorted(Comparator.comparing(Airing::start,
-                            Comparator.nullsLast(Comparator.naturalOrder())))
-                    .toList();
+        void addEntry(ScheduleEntry entry) {
+            entries.add(entry);
         }
 
         double tvmazeScore() {

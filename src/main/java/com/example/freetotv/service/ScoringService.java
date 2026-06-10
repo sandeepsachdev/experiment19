@@ -1,9 +1,5 @@
 package com.example.freetotv.service;
 
-import java.time.OffsetDateTime;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.time.format.TextStyle;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -27,8 +23,6 @@ public class ScoringService {
     public static final String ROTTEN_TOMATOES = "Rotten Tomatoes";
     public static final String METACRITIC = "Metacritic";
     public static final String TVMAZE = "TVmaze";
-
-    private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm");
 
     private final AppProperties properties;
 
@@ -85,7 +79,7 @@ public class ScoringService {
 
     /** Composes a one-line explanation of why a title is recommended. */
     public String buildWhy(String title, List<String> genres, List<RatingSource> sources,
-                           Optional<Airing> nextAiring, ZoneId zone) {
+                           Optional<Airing> nextAiring) {
         StringBuilder sb = new StringBuilder();
         if (genres != null && !genres.isEmpty()) {
             sb.append("Well-rated ").append(genres.get(0).toLowerCase(Locale.ROOT));
@@ -102,32 +96,18 @@ public class ScoringService {
             sb.append(" (").append(breakdown).append(")");
         }
 
-        nextAiring.ifPresent(airing -> sb.append(describeAiring(airing, zone)));
+        nextAiring.ifPresent(airing -> sb.append(describeAiring(airing)));
         sb.append('.');
         return sb.toString();
     }
 
-    private String describeAiring(Airing airing, ZoneId zone) {
-        if (airing.start() == null) {
-            return airing.channel() != null ? " on " + airing.channel() : "";
-        }
-        OffsetDateTime local = airing.start().atZoneSameInstant(zone).toOffsetDateTime();
-        String day = relativeDay(local, zone);
+    private String describeAiring(Airing airing) {
         String channel = StringUtils.hasText(airing.channel()) ? " on " + airing.channel() : "";
-        return " — airing " + day + " at " + local.format(TIME) + channel;
-    }
-
-    private String relativeDay(OffsetDateTime when, ZoneId zone) {
-        var today = OffsetDateTime.now(zone).toLocalDate();
-        var date = when.toLocalDate();
-        long delta = today.until(date).getDays();
-        if (delta == 0) {
-            return "today";
+        if (airing.dayLabel() == null || airing.time() == null) {
+            return channel;
         }
-        if (delta == 1) {
-            return "tomorrow";
-        }
-        return when.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.ENGLISH);
+        return " — airing " + airing.dayLabel().toLowerCase(Locale.ROOT)
+                + " at " + airing.time() + channel;
     }
 
     private double weightFor(String sourceName) {

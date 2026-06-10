@@ -41,7 +41,7 @@ class RecommendationControllerTest {
                 42L, "Brilliant Drama", "Scripted", List.of("Drama"),
                 "A gripping tale.", "http://img/o.jpg", "http://site", 8.6,
                 List.of(new RatingSource("IMDb", 8.4, "8.4/10")),
-                List.of(new Airing("BBC One", null, "The Pilot", 1, 1, 60)),
+                List.of(new Airing("ABC", null, "Today", "21:00", "The Pilot", 1, 1, 60)),
                 "Well-rated drama.");
         when(recommendationService.recommend(any())).thenReturn(List.of(rec));
 
@@ -50,6 +50,8 @@ class RecommendationControllerTest {
                 .andExpect(jsonPath("$[0].title").value("Brilliant Drama"))
                 .andExpect(jsonPath("$[0].compositeScore").value(8.6))
                 .andExpect(jsonPath("$[0].ratingSources[0].name").value("IMDb"))
-                .andExpect(jsonPath("$[0].airings[0].channel").value("BBC One"));
+                .andExpect(jsonPath("$[0].airings[0].channel").value("ABC"))
+                .andExpect(jsonPath("$[0].airings[0].dayLabel").value("Today"))
+                .andExpect(jsonPath("$[0].airings[0].time").value("21:00"));
     }
 }
