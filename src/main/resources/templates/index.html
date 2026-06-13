@@ -51,20 +51,13 @@
 
     <section class="grid">
         <article class="card" th:each="rec : ${recommendations}">
-            <div class="poster" th:if="${rec.imageUrl != null}">
-                <img th:src="${rec.imageUrl}" th:alt="${rec.title}"/>
-            </div>
+            <img class="thumb" th:if="${rec.imageUrl != null}" th:src="${rec.imageUrl}" th:alt="${rec.title}"/>
             <div class="body">
                 <div class="card-head">
                     <h2 th:text="${rec.title}">Show title</h2>
                     <span class="score" th:if="${rec.compositeScore > 0}"
                           th:text="${#numbers.formatDecimal(rec.compositeScore, 1, 1)}">8.4</span>
                 </div>
-
-                <p class="meta">
-                    <span th:if="${rec.type != null}" th:text="${rec.type}">Scripted</span>
-                    <span th:if="${!rec.genres.isEmpty()}" th:text="'· ' + ${#strings.listJoin(rec.genres, ', ')}">Drama</span>
-                </p>
 
                 <!-- Next upcoming airing, formatted for quick scanning -->
                 <div class="next-up" th:with="next=${rec.airings[0]}">
@@ -73,7 +66,10 @@
                     <span class="on-channel" th:if="${next.channel != null}" th:text="${next.channel}">ABC</span>
                 </div>
 
-                <p class="why" th:text="${rec.why}">Why we recommend this.</p>
+                <p class="meta">
+                    <span th:if="${rec.type != null}" th:text="${rec.type}">Scripted</span>
+                    <span th:if="${!rec.genres.isEmpty()}" th:text="'· ' + ${#strings.listJoin(rec.genres, ', ')}">Drama</span>
+                </p>
 
                 <ul class="sources" th:if="${!rec.ratingSources.isEmpty()}">
                     <li th:each="src : ${rec.ratingSources}">
@@ -82,22 +78,24 @@
                     </li>
                 </ul>
 
-                <details class="airings" th:if="${rec.airings.size() > 1}">
-                    <summary th:text="'All ' + ${rec.airings.size()} + ' upcoming airings'">All airings</summary>
-                    <ul>
-                        <li th:each="air : ${rec.airings}">
-                            <span class="when" th:text="${air.dayLabel} ?: 'Time TBC'">Today</span>
-                            <span class="time" th:if="${air.time != null}" th:text="${air.time}">21:00</span>
-                            <span class="channel" th:if="${air.channel != null}" th:text="${air.channel}">ABC</span>
-                            <span class="episode" th:if="${air.episodeName != null}" th:text="${air.episodeName}"></span>
-                        </li>
-                    </ul>
+                <details class="more" th:if="${rec.summary != null or rec.airings.size() > 1}">
+                    <summary>More</summary>
+                    <p class="why" th:text="${rec.why}">Why we recommend this.</p>
+                    <p class="summary" th:if="${rec.summary != null}" th:text="${rec.summary}">Summary.</p>
+                    <div class="airings" th:if="${rec.airings.size() > 1}">
+                        <span class="airings-title" th:text="'All ' + ${rec.airings.size()} + ' upcoming airings'">All airings</span>
+                        <ul>
+                            <li th:each="air : ${rec.airings}">
+                                <span class="when" th:text="${air.dayLabel} ?: 'Time TBC'">Today</span>
+                                <span class="time" th:if="${air.time != null}" th:text="${air.time}">21:00</span>
+                                <span class="channel" th:if="${air.channel != null}" th:text="${air.channel}">ABC</span>
+                                <span class="episode" th:if="${air.episodeName != null}" th:text="${air.episodeName}"></span>
+                            </li>
+                        </ul>
+                    </div>
+                    <a class="official" th:if="${rec.officialSite != null}" th:href="${rec.officialSite}"
+                       target="_blank" rel="noopener">Official site ↗</a>
                 </details>
-
-                <p class="summary" th:if="${rec.summary != null}" th:text="${rec.summary}">Summary.</p>
-
-                <a class="official" th:if="${rec.officialSite != null}" th:href="${rec.officialSite}"
-                   target="_blank" rel="noopener">Official site ↗</a>
             </div>
         </article>
     </section>
