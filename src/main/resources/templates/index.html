@@ -50,7 +50,8 @@
     </p>
 
     <section class="grid">
-        <article class="card" th:each="rec : ${recommendations}">
+        <article class="card" th:each="rec : ${recommendations}"
+                 th:classappend="${rec.imageUrl != null} ? 'has-thumb' : ''">
             <img class="thumb" th:if="${rec.imageUrl != null}" th:src="${rec.imageUrl}" th:alt="${rec.title}"/>
             <div class="body">
                 <div class="card-head">

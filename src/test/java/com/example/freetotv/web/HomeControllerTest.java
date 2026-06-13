@@ -53,6 +53,7 @@ class HomeControllerTest {
                 // Country dropdown defaults to Australia.
                 .andExpect(content().string(containsString("selected=\"selected\">Australia")))
                 // Compact card: thumbnail, scannable next-up line, and an expandable "More" section.
+                .andExpect(content().string(containsString("has-thumb")))
                 .andExpect(content().string(containsString("class=\"thumb\"")))
                 .andExpect(content().string(containsString("class=\"next-up\"")))
                 .andExpect(content().string(containsString("<summary>More</summary>")))

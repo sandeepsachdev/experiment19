@@ -76,16 +76,27 @@ main { max-width: 78rem; margin: 0 auto; padding: 1rem 1.25rem; }
 }
 
 .card {
+    position: relative;
     background: var(--card);
     border-radius: 10px;
     overflow: hidden;
-    display: flex;
     border: 1px solid #262c47;
 }
 
-.thumb { width: 64px; flex-shrink: 0; object-fit: cover; align-self: stretch; }
+/* Thumbnail is taken out of flow so the card height is driven solely by the
+   (collapsible) body content — otherwise a stretched image can stay pinned at
+   its expanded height when the description collapses. */
+.thumb {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 64px;
+    height: 100%;
+    object-fit: cover;
+}
 
-.body { padding: .55rem .7rem; display: flex; flex-direction: column; gap: .35rem; min-width: 0; flex: 1; }
+.body { padding: .55rem .7rem; display: flex; flex-direction: column; gap: .35rem; min-width: 0; }
+.card.has-thumb .body { padding-left: calc(64px + .7rem); }
 
 .card-head { display: flex; justify-content: space-between; align-items: baseline; gap: .5rem; }
 .card-head h2 {
